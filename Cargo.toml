@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-assertables = "9.8.2"
+googletest = "0.14.2"

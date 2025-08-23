@@ -1,17 +1,18 @@
+use googletest::prelude::*;
 use std::process::Command;
-use assertables::assert_contains;
 
 const APP_FILE: &str = "target/debug/rustcat";
 
-#[test]
+#[gtest]
 fn test_not_implemented() {
     let output = Command::new(APP_FILE)
-        .output().expect("Error running command");
+        .output()
+        .expect("Error running command");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert_contains!(stdout, "not implemented");
+    expect_that!(stdout, contains_substring("not implemented"));
 }
 
-#[test]
+#[gtest]
 fn test_error_with_args() {
     let output = Command::new("target/debug/rustcat")
         .arg("foo")
@@ -19,8 +20,11 @@ fn test_error_with_args() {
         .expect("Error running command");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.is_empty());
+    expect_that!(stdout, eq(""));
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_contains!(stderr, "rustcat only supports reading from stdin");
+    expect_that!(
+        stderr,
+        contains_substring("rustcat only supports reading from stdin")
+    );
 }
