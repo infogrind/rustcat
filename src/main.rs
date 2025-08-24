@@ -2,11 +2,14 @@ use either::Either;
 use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
+use std::path::Path;
 
 /// Returns an iterator over the lines of all given files, in order.
-fn lines_from_files<I: IntoIterator<Item = String>>(
-    files: I,
-) -> impl Iterator<Item = io::Result<String>> {
+fn lines_from_files<I, P>(files: I) -> impl Iterator<Item = io::Result<String>>
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<Path>,
+{
     files.into_iter().flat_map(|path| {
         let file = File::open(&path);
         match file {
