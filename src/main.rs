@@ -26,16 +26,14 @@ fn lines_from_stdin() -> impl Iterator<Item = io::Result<String>> {
 
 /// Prints the lines from the given iterator to stdout, or an error.
 fn cat<I: IntoIterator<Item = io::Result<String>>>(it: I) {
-    for line in it {
-        match line {
-            Ok(text) => {
-                println!("{}", text);
-            }
-            Err(e) => {
-                eprintln!("Error reading line: {}", e);
-            }
-        }
-    }
+    it.into_iter()
+        .try_for_each(|line| {
+            println!("{}", line?);
+            Ok(())
+        })
+        .unwrap_or_else(|e: io::Error| {
+            eprintln!("Error reading line: {}.", e);
+        })
 }
 
 fn main() {
