@@ -1,3 +1,4 @@
+use either::Either;
 use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
@@ -8,13 +9,10 @@ fn lines_from_files<I: IntoIterator<Item = String>>(
 ) -> impl Iterator<Item = io::Result<String>> {
     files.into_iter().flat_map(|path| {
         let file = File::open(&path);
-        // Here Box<dyn ...> is needed because the two branches of the match return different
-        // underlying types.
-        let reader: Box<dyn Iterator<Item = io::Result<String>>> = match file {
-            Ok(file) => Box::new(BufReader::new(file).lines()),
-            Err(e) => Box::new(std::iter::once(Err(e))),
-        };
-        reader
+        match file {
+            Ok(file) => Either::Left(BufReader::new(file).lines()),
+            Err(e) => Either::Right(std::iter::once(Err(e))),
+        }
     })
 }
 
