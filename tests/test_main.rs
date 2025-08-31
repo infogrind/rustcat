@@ -45,3 +45,14 @@ fn test_prints_from_file_input() {
         container_eq(["Hello, world", "How are you?", "Bongo", "This is bar"])
     );
 }
+
+#[gtest]
+fn test_file_not_found_error_contains_filename() {
+    let output = Command::new(APP_FILE)
+        .arg("invalid_file.txt")
+        .output()
+        .expect("Could not run app.");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    expect_that!(stderr, contains_substring("invalid_file.txt"))
+}
