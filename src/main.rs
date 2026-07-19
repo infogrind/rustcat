@@ -17,6 +17,16 @@ where
         let file: Result<File, Error> = File::open(&path)
             .with_context(|| format!("Error opening file {}", path));
         match file {
+            // `.lines()` is the main remaining source of latency vs. `cat`:
+            // it allocates a new heap `String` per line and validates every
+            // line's bytes as UTF-8, work `cat` never does because it just
+            // copies raw bytes without interpreting them. Replacing this
+            // with a raw `std::io::copy` from a `BufReader<File>` straight
+            // into stdout would remove both costs, at the price of some
+            // behavior: invalid-UTF-8/binary input would pass through
+            // instead of erroring, and concatenating a file with no
+            // trailing newline into the next would merge their first/last
+            // lines like real `cat` does, instead of always separating them.
             Ok(file) => Either::Left(
                 BufReader::new(file).lines().map(|i| i.map_err(Error::from)),
             ),
@@ -27,6 +37,8 @@ where
 
 /// Returns an iterator over the lines of stdin.
 fn lines_from_stdin() -> impl Iterator<Item = Result<String, Error>> {
+    // Same per-line allocation + UTF-8 validation cost as in
+    // `lines_from_files` above.
     io::stdin()
         .lock()
         .lines()
