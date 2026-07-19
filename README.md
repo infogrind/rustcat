@@ -27,6 +27,14 @@ This small program does almost nothing but already illustrates a number of Rust 
 
 ## Performance
 
-`rustcat` is two orders of magnitude _slower_ than your standard `cat`. It has
-about the same performance as `bat` (tested by catting a file of several
-megabytes to `/dev/null`).
+`rustcat` locks stdout once and writes through a `BufWriter`, so its
+throughput on large files is now in the same ballpark as the system `cat`.
+
+To check throughput on your own machine, run the perf test (it's marked
+`#[ignore]` since timings vary by machine, so it's excluded from the normal
+`cargo test` run):
+
+```shell
+cargo build --release
+cargo test --release --test perf_test -- --ignored --nocapture
+```
