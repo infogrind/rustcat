@@ -2,7 +2,7 @@ use anyhow::{Context, Error};
 use either::Either;
 use std::env;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
 
 /// Returns an iterator over the lines of all given files, in order.
@@ -34,12 +34,19 @@ fn lines_from_stdin() -> impl Iterator<Item = Result<String, Error>> {
 }
 
 /// Prints the lines from the given iterator to stdout, or an error.
+///
+/// `Stdout` is line-buffered internally, so printing line by line via
+/// `println!` flushes on every line. Locking it once and wrapping it in a
+/// `BufWriter` batches those writes into a handful of larger syscalls.
 fn cat<I: IntoIterator<Item = Result<String, Error>>>(it: I) {
+    let stdout = io::stdout();
+    let mut out = io::BufWriter::new(stdout.lock());
     it.into_iter()
-        .try_for_each(|line| {
-            println!("{}", line?);
+        .try_for_each(|line| -> Result<(), Error> {
+            writeln!(out, "{}", line?)?;
             Ok(())
         })
+        .and_then(|_| out.flush().map_err(Error::from))
         .unwrap_or_else(|e: Error| {
             eprintln!("{:?}", e);
         })
