@@ -6,14 +6,37 @@
 
 use std::fs;
 use std::io::Write;
+use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
 const APP_FILE: &str = "target/release/rustcat";
 const NUM_LINES: usize = 500_000;
+const RUNS: usize = 5;
 
 fn mib_per_sec(mib: f64, elapsed: Duration) -> f64 {
     mib / elapsed.as_secs_f64()
+}
+
+/// Runs `program` on `path` once untimed, then `RUNS` times, and returns the
+/// fastest run along with its stdout, or `None` if the program failed.
+///
+/// The untimed warm-up matters: the first launch of a freshly built binary
+/// can be much slower than later ones (e.g. macOS scans new executables on
+/// first run), which would otherwise dominate the measurement.
+fn best_run(program: &str, path: &Path) -> Option<(Duration, Vec<u8>)> {
+    let run = || {
+        let start = Instant::now();
+        let output = Command::new(program).arg(path).output().ok()?;
+        let elapsed = start.elapsed();
+        output.status.success().then_some((elapsed, output.stdout))
+    };
+    run()?;
+    (0..RUNS)
+        .map(|_| run())
+        .collect::<Option<Vec<_>>>()?
+        .into_iter()
+        .min_by_key(|(elapsed, _)| *elapsed)
 }
 
 #[test]
@@ -31,39 +54,33 @@ fn bench_cat_large_file() {
             .expect("Failed to write test file.");
         }
     }
-    let file_mib =
-        fs::metadata(&path).unwrap().len() as f64 / (1024.0 * 1024.0);
+    let expected = fs::read(&path).expect("Failed to read test file.");
+    let file_mib = expected.len() as f64 / (1024.0 * 1024.0);
 
-    let start = Instant::now();
-    let output = Command::new(APP_FILE).arg(&path).output().unwrap_or_else(|e| {
-        panic!("Failed to run {APP_FILE} ({e}). Did you run `cargo build --release`?")
+    let (elapsed, stdout) = best_run(APP_FILE, &path).unwrap_or_else(|| {
+        panic!("Failed to run {APP_FILE}. Did you run `cargo build --release`?")
     });
-    let elapsed = start.elapsed();
-    assert!(output.status.success(), "rustcat exited with an error");
-    let line_count = output.stdout.iter().filter(|&&b| b == b'\n').count();
-    assert_eq!(line_count, NUM_LINES, "rustcat did not print all lines");
+    assert!(stdout == expected, "rustcat output differs from the input");
 
     println!(
-        "rustcat: {NUM_LINES} lines / {file_mib:.1} MiB in {:.3}s ({:.1} MiB/s)",
+        "rustcat: {NUM_LINES} lines / {file_mib:.1} MiB in {:.3}s ({:.1} MiB/s), best of {RUNS}",
         elapsed.as_secs_f64(),
         mib_per_sec(file_mib, elapsed)
     );
 
-    let cat_start = Instant::now();
-    match Command::new("cat").arg(&path).output() {
-        Ok(cat_output) if cat_output.status.success() => {
-            let cat_elapsed = cat_start.elapsed();
+    match best_run("cat", &path) {
+        Some((cat_elapsed, _)) => {
             println!(
-                "cat:     {NUM_LINES} lines / {file_mib:.1} MiB in {:.3}s ({:.1} MiB/s)",
+                "cat:     {NUM_LINES} lines / {file_mib:.1} MiB in {:.3}s ({:.1} MiB/s), best of {RUNS}",
                 cat_elapsed.as_secs_f64(),
                 mib_per_sec(file_mib, cat_elapsed)
             );
             println!(
-                "rustcat is {:.1}x slower than cat here",
+                "rustcat takes {:.1}x as long as cat here",
                 elapsed.as_secs_f64() / cat_elapsed.as_secs_f64()
             );
         }
-        _ => println!("(system `cat` not available for comparison)"),
+        None => println!("(system `cat` not available for comparison)"),
     }
 
     fs::remove_file(&path).ok();
